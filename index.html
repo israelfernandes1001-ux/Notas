@@ -1,12 +1,213 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ranking Escolar</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
+document.addEventListener("DOMContentLoaded", () => {
+  solicitarPermissaoNotificacao();
+  gerarFormularioCadastro();
+  verificarStatusUsuario();
+  iniciarChecagemNotificacoes();
+
+  document.getElementById("form-inicial").addEventListener("submit", salvarCadastroInicial);
+  document.getElementById("form-lembrete").addEventListener("submit", salvarLembrete);
+});
+
+function solicitarPermissaoNotificacao() {
+  if ("Notification" in window && Notification.permission !== "granted") {
+    Notification.requestPermission();
+  }
+}
+
+// Gera o form de cadastro (6 aulas seg/qua/sex - 10 aulas ter/qui)
+function gerarFormularioCadastro() {
+  const container = document.getElementById("grade-inputs");
+  const dias = [
+    { id: 1, nome: "Segunda-feira", qtd: 6 },
+    { id: 2, nome: "Terça-feira (Integral)", qtd: 10 },
+    { id: 3, nome: "Quarta-feira", qtd: 6 },
+    { id: 4, nome: "Quinta-feira (Integral)", qtd: 10 },
+    { id: 5, nome: "Sexta-feira", qtd: 6 }
+  ];
+
+  container.innerHTML = dias.map(dia => `
+    <div style="margin-bottom:15px;">
+      <h4 style="margin-bottom:5px;">${dia.nome}</h4>
+      ${Array.from({ length: dia.qtd }, (_, i) => `
+        <input type="text" class="materia-input" data-dia="${dia.id}" placeholder="${i + 1}º Horário">
+      `).join("")}
+    </div>
+  `).join("");
+}
+
+function verificarStatusUsuario() {
+  const usuario = JSON.parse(localStorage.getItem("usuario_sesi"));
+
+  if (usuario) {
+    document.getElementById("tela-cadastro-inicial").classList.add("oculto");
+    document.getElementById("tela-principal").classList.remove("oculto");
+    
+    configurarSaudacao(usuario.nome);
+    carregarAulasDoDia();
+    carregarLembreteDoDia();
+  } else {
+    document.getElementById("tela-cadastro-inicial").classList.remove("oculto");
+    document.getElementById("tela-principal").classList.add("oculto");
+  }
+}
+
+function configurarSaudacao(nome) {
+  const hora = new Date().getHours();
+  let textoSaudacao = "Bom dia";
+  if (hora >= 12 && hora < 18) textoSaudacao = "Boa tarde";
+  else if (hora >= 18 || hora < 5) textoSaudacao = "Boa noite";
+
+  document.getElementById("saudacao").textContent = `${textoSaudacao}!`;
+  document.getElementById("nome-usuario").textContent = nome;
+}
+
+// Salva digitado OU via código
+function salvarCadastroInicial(e) {
+  e.preventDefault();
+
+  const nome = document.getElementById("nome").value.trim();
+  const sobrenome = document.getElementById("sobrenome").value.trim();
+  const codigoImportar = document.getElementById("input-codigo-importar").value.trim();
+
+  let grade = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+
+  if (codigoImportar) {
+    try {
+      grade = JSON.parse(atob(codigoImportar));
+    } catch (err) {
+      alert("Código de turma inválido!");
+      return;
+    }
+  } else {
+    const inputs = document.querySelectorAll(".materia-input");
+    inputs.forEach(input => {
+      const dia = input.getAttribute("data-dia");
+      const valor = input.value.trim();
+      if (valor) grade[dia].push(valor);
+    });
+  }
+
+  localStorage.setItem("usuario_sesi", JSON.stringify({ nome, sobrenome }));
+  localStorage.setItem("grade_sesi", JSON.stringify(grade));
+
+  verificarStatusUsuario();
+}
+
+function carregarAulasDoDia() {
+  const container = document.getElementById("aulas-hoje");
+  const hoje = new Date();
+  const diaSemana = hoje.getDay(); // 0 = Dom, 6 = Sáb
+
+  if (diaSemana === 0 || diaSemana === 6) {
+    container.innerHTML = `<div class="fim-de-semana">🎉 Fim de semana! Não tem aula hoje.</div>`;
+    return;
+  }
+
+  const grade = JSON.parse(localStorage.getItem("grade_sesi")) || {};
+  const aulasHoje = grade[diaSemana] || [];
+
+  if (aulasHoje.length === 0) {
+    container.innerHTML = "<p style='color:#777;'>Nenhuma matéria cadastrada para hoje.</p>";
+    return;
+  }
+
+  container.innerHTML = aulasHoje.map((materia, i) => `
+    <div class="aula-item"><strong>${i + 1}º Horário:</strong> ${materia}</div>
+  `).join("");
+}
+
+// Só exibe o card de lembretes se houver algum no DIA ATUAL
+function carregarLembreteDoDia() {
+  const container = document.getElementById("lembretes-hoje");
+  const cardSection = document.getElementById("card-lembretes");
+  const lembretes = JSON.parse(localStorage.getItem("lembretes_sesi")) || [];
+
+  const hojeFormatado = new Date().toISOString().split("T")[0];
+
+  const lembretesHoje = lembretes.filter(l => {
+    const dataLembrete = l.dataHora.split("T")[0];
+    return dataLembrete === hojeFormatado;
+  });
+
+  if (lembretesHoje.length === 0) {
+    cardSection.classList.add("oculto");
+    return;
+  }
+
+  cardSection.classList.remove("oculto");
+  container.innerHTML = lembretesHoje.map(l => {
+    const hora = new Date(l.dataHora).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    return `<div class="lembrete-item">📌 <strong>${l.titulo}</strong> às ${hora}</div>`;
+  }).join("");
+}
+
+function salvarLembrete(e) {
+  e.preventDefault();
+  const titulo = document.getElementById("titulo-lembrete").value.trim();
+  const dataHora = document.getElementById("data-lembrete").value;
+
+  const lembretes = JSON.parse(localStorage.getItem("lembretes_sesi")) || [];
+  lembretes.push({ id: Date.now(), titulo, dataHora, notificado: false });
+  localStorage.setItem("lembretes_sesi", JSON.stringify(lembretes));
+
+  document.getElementById("form-lembrete").reset();
+  fecharModal("modal-lembrete");
+  carregarLembreteDoDia();
+}
+
+// Gerador de código (Exporta a grade em Base64)
+function gerarCodigoTurma() {
+  toggleMenu();
+  const grade = localStorage.getItem("grade_sesi");
+  if (!grade) return;
+
+  const codigo = btoa(grade);
+  document.getElementById("codigo-gerado").value = codigo;
+  abrirModal("modal-codigo");
+}
+
+function copiarCodigo() {
+  const campo = document.getElementById("codigo-gerado");
+  campo.select();
+  navigator.clipboard.writeText(campo.value);
+  alert("Código copiado para a área de transferência!");
+}
+
+// Controle do Menu e Modais
+function toggleMenu() {
+  document.getElementById("dropdown-menu").classList.toggle("oculto");
+}
+
+function abrirModal(id) {
+  document.getElementById(id).classList.remove("oculto");
+}
+
+function fecharModal(id) {
+  document.getElementById(id).classList.add("oculto");
+}
+
+function redefinirTudo() {
+  if (confirm("Quer alterar seus horários ou nome?")) {
+    localStorage.clear();
+    location.reload();
+  }
+}
+
+function iniciarChecagemNotificacoes() {
+  setInterval(() => {
+    const lembretes = JSON.parse(localStorage.getItem("lembretes_sesi")) || [];
+    const agora = new Date().getTime();
+
+    lembretes.forEach(l => {
+      const horaLembrete = new Date(l.dataHora).getTime();
+      if (agora >= horaLembrete && !l.notificado) {
+        if (Notification.permission === "granted") {
+          new Notification("Lembrete SESI 🔔", { body: l.titulo });
+        }
+        l.notificado = true;
+      }
+    });
+
+    localStorage.setItem("lembretes_sesi", JSON.stringify(lembretes));
+  }, 10000);
+}
