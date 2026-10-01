@@ -4,7 +4,7 @@
 create table members(id uuid primary key, tok text not null, name text, room text, is_mod boolean not null default false, ts timestamptz default now());
 create table avisos(id uuid primary key default gen_random_uuid(), room text not null, t text not null, fixed boolean, d date, exp bigint, "time" text, "by" text, ts timestamptz default now());
 create table config(k text primary key, v text not null);
-insert into config values('owner','TROQUE-ESTE-CODIGO');
+insert into config values('owner','Sesi#Dono2026);
 
 alter table members enable row level security;
 alter table config enable row level security;
