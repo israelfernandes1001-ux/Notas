@@ -10,4 +10,4 @@ Horário, lembretes pessoais e avisos por sala (2º A, B, C e D) com moderadores
 5. Envie para o GitHub e ative **Settings → Pages** (branch `main`, pasta `/ (root)`)
 
 ## Como o dono entra
-No app, vá em **Perfil → Sou o dono**, digite o código e a aba **Painel** aparece..
+No app, vá em **Perfil → Sou o dono**, digite o código e a aba **Painel** aparece.
